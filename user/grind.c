@@ -12,6 +12,8 @@
 #include "kernel/memlayout.h"
 #include "kernel/riscv.h"
 
+char msg[32];
+
 // from FreeBSD.
 int
 do_rand(unsigned long *ctx)
@@ -58,7 +60,7 @@ go(int which_child)
   mkdir("grindir");
   if(chdir("grindir") != 0){
     printf("grind: chdir grindir failed\n");
-    exit(1);
+    exit(1, "exit 1 \n");
   }
   chdir("/");
   
@@ -76,7 +78,7 @@ go(int which_child)
     } else if(what == 4){
       if(chdir("grindir") != 0){
         printf("grind: chdir grindir failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
       unlink("../b");
       chdir("/");
@@ -107,23 +109,23 @@ go(int which_child)
     } else if(what == 13){
       int pid = fork();
       if(pid == 0){
-        exit(0);
+        exit(0, "exit 0\n");
       } else if(pid < 0){
         printf("grind: fork failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
-      wait(0);
+      wait(0, msg);
     } else if(what == 14){
       int pid = fork();
       if(pid == 0){
         fork();
         fork();
-        exit(0);
+        exit(0, "exit 0\n");
       } else if(pid < 0){
         printf("grind: fork failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
-      wait(0);
+      wait(0, msg);
     } else if(what == 15){
       sbrk(6011);
     } else if(what == 16){
@@ -133,32 +135,32 @@ go(int which_child)
       int pid = fork();
       if(pid == 0){
         close(open("a", O_CREATE|O_RDWR));
-        exit(0);
+        exit(0, "exit 0\n");
       } else if(pid < 0){
         printf("grind: fork failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
       if(chdir("../grindir/..") != 0){
         printf("grind: chdir failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
       kill(pid);
-      wait(0);
+      wait(0, msg);
     } else if(what == 18){
       int pid = fork();
       if(pid == 0){
         kill(getpid());
-        exit(0);
+        exit(0, "exit 0\n");
       } else if(pid < 0){
         printf("grind: fork failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
-      wait(0);
+      wait(0, msg);
     } else if(what == 19){
       int fds[2];
       if(pipe(fds) < 0){
         printf("grind: pipe failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
       int pid = fork();
       if(pid == 0){
@@ -169,14 +171,14 @@ go(int which_child)
         char c;
         if(read(fds[0], &c, 1) != 1)
           printf("grind: pipe read failed\n");
-        exit(0);
+        exit(0, "exit 0\n");
       } else if(pid < 0){
         printf("grind: fork failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
       close(fds[0]);
       close(fds[1]);
-      wait(0);
+      wait(0, msg);
     } else if(what == 20){
       int pid = fork();
       if(pid == 0){
@@ -186,12 +188,12 @@ go(int which_child)
         unlink("../a");
         fd = open("x", O_CREATE|O_RDWR);
         unlink("x");
-        exit(0);
+        exit(0, "exit 0\n");
       } else if(pid < 0){
         printf("grind: fork failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
-      wait(0);
+      wait(0, msg);
     } else if(what == 21){
       unlink("c");
       // should always succeed. check that there are free i-nodes,
@@ -199,24 +201,24 @@ go(int which_child)
       int fd1 = open("c", O_CREATE|O_RDWR);
       if(fd1 < 0){
         printf("grind: create c failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
       if(write(fd1, "x", 1) != 1){
         printf("grind: write c failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
       struct stat st;
       if(fstat(fd1, &st) != 0){
         printf("grind: fstat failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
       if(st.size != 1){
         printf("grind: fstat reports wrong size %d\n", (int)st.size);
-        exit(1);
+        exit(1, "exit 1 \n");
       }
       if(st.ino > 200){
         printf("grind: fstat reports crazy i-number %d\n", st.ino);
-        exit(1);
+        exit(1, "exit 1 \n");
       }
       close(fd1);
       unlink("c");
@@ -225,11 +227,11 @@ go(int which_child)
       int aa[2], bb[2];
       if(pipe(aa) < 0){
         fprintf(2, "grind: pipe failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
       if(pipe(bb) < 0){
         fprintf(2, "grind: pipe failed\n");
-        exit(1);
+        exit(1, "exit 1 \n");
       }
       int pid1 = fork();
       if(pid1 == 0){
@@ -239,16 +241,16 @@ go(int which_child)
         close(1);
         if(dup(aa[1]) != 1){
           fprintf(2, "grind: dup failed\n");
-          exit(1);
+          exit(1, "exit 1 \n");
         }
         close(aa[1]);
         char *args[3] = { "echo", "hi", 0 };
         exec("grindir/../echo", args);
         fprintf(2, "grind: echo: not found\n");
-        exit(2);
+        exit(2, "exit 2\n");
       } else if(pid1 < 0){
         fprintf(2, "grind: fork failed\n");
-        exit(3);
+        exit(3, "exit 3\n");
       }
       int pid2 = fork();
       if(pid2 == 0){
@@ -257,22 +259,22 @@ go(int which_child)
         close(0);
         if(dup(aa[0]) != 0){
           fprintf(2, "grind: dup failed\n");
-          exit(4);
+          exit(4, "exit 4\n");
         }
         close(aa[0]);
         close(1);
         if(dup(bb[1]) != 1){
           fprintf(2, "grind: dup failed\n");
-          exit(5);
+          exit(5, "exit 5\n");
         }
         close(bb[1]);
         char *args[2] = { "cat", 0 };
         exec("/cat", args);
         fprintf(2, "grind: cat: not found\n");
-        exit(6);
+        exit(6, "exit 6\n");
       } else if(pid2 < 0){
         fprintf(2, "grind: fork failed\n");
-        exit(7);
+        exit(7, "exit 7\n");
       }
       close(aa[0]);
       close(aa[1]);
@@ -283,11 +285,11 @@ go(int which_child)
       read(bb[0], buf+2, 1);
       close(bb[0]);
       int st1, st2;
-      wait(&st1);
-      wait(&st2);
+      wait(&st1, msg);
+      wait(&st2, msg);
       if(st1 != 0 || st2 != 0 || strcmp(buf, "hi\n") != 0){
         printf("grind: exec pipeline failed %d %d \"%s\"\n", st1, st2, buf);
-        exit(1);
+        exit(1, "exit 1 \n");
       }
     }
   }
@@ -302,35 +304,35 @@ iter()
   int pid1 = fork();
   if(pid1 < 0){
     printf("grind: fork failed\n");
-    exit(1);
+    exit(1, "exit 1 \n");
   }
   if(pid1 == 0){
     rand_next ^= 31;
     go(0);
-    exit(0);
+    exit(0, "exit 0\n");
   }
 
   int pid2 = fork();
   if(pid2 < 0){
     printf("grind: fork failed\n");
-    exit(1);
+    exit(1, "exit 1 \n");
   }
   if(pid2 == 0){
     rand_next ^= 7177;
     go(1);
-    exit(0);
+    exit(0, "exit 0\n");
   }
 
   int st1 = -1;
-  wait(&st1);
+  wait(&st1, msg);
   if(st1 != 0){
     kill(pid1);
     kill(pid2);
   }
   int st2 = -1;
-  wait(&st2);
+  wait(&st2, msg);
 
-  exit(0);
+  exit(0, "exit 0\n");
 }
 
 int
@@ -340,10 +342,10 @@ main()
     int pid = fork();
     if(pid == 0){
       iter();
-      exit(0);
+      exit(0, "exit 0\n");
     }
     if(pid > 0){
-      wait(0);
+      wait(0, msg);
     }
     sleep(20);
     rand_next += 1;

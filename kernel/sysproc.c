@@ -10,8 +10,21 @@ uint64
 sys_exit(void)
 {
   int n;
+  uint64 msg_addr;
+  struct proc *p = myproc();
+  char msg[32] = {0};
+
   argint(0, &n);
-  exit(n);
+  argaddr(1, &msg_addr);
+
+  // safely copy message from user space to kernel buffer
+  if (msg_addr != 0) {
+    if (copyin(p->pagetable, msg, msg_addr, sizeof(msg)) < 0)
+      return -1;
+    msg[sizeof(msg)-1] = '\0'; // ensure null-termination
+  }
+
+  exit(n , msg);
   return 0;  // not reached
 }
 
@@ -31,8 +44,10 @@ uint64
 sys_wait(void)
 {
   uint64 p;
-  argaddr(0, &p);
-  return wait(p);
+  uint64 msg_addr;
+  argaddr(0, &p); // First arg: int*
+  argaddr(1, &msg_addr); // Second arg: char*
+  return wait(p, msg_addr);
 }
 
 uint64
@@ -88,4 +103,13 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64
+sys_memsize(void)
+{
+  // uint64 addr;
+
+  // addr = myproc()->sz;
+  return myproc()->sz;
 }
