@@ -349,16 +349,26 @@ exit(int status, char *msg)
 {
   struct proc *p = myproc();
 
-  if(p == initproc)
-    panic("init exiting");
+  acquire(&wait_lock);
 
-  // Close all open files.
-  for(int fd = 0; fd < NOFILE; fd++){
-    if(p->ofile[fd]){
-      struct file *f = p->ofile[fd];
-      fileclose(f);
-      p->ofile[fd] = 0;
-    }
+  // Save exit status
+  p->xstate = status;
+
+  // Copy the exit message safely
+  if (msg) {
+      strncpy(p->exit_msg, msg, sizeof(p->exit_msg));
+      p->exit_msg[sizeof(p->exit_msg) - 1] = '\0';  
+  } else {
+      p->exit_msg[0] = '\0';  
+  }
+
+  // Close all open file descriptors
+  for (int fd = 0; fd < NOFILE; fd++) {
+      if (p->ofile[fd]) {
+          struct file *f = p->ofile[fd];
+          fileclose(f);
+          p->ofile[fd] = 0;
+      }
   }
 
   begin_op();
@@ -366,28 +376,24 @@ exit(int status, char *msg)
   end_op();
   p->cwd = 0;
 
-  acquire(&wait_lock);
-
-  // Give any children to init.
-  reparent(p);
-
-  // Parent might be sleeping in wait().
-  wakeup(p->parent);
-  
-  acquire(&p->lock);
-
-  p->xstate = status;
-  if (msg != 0) {
-    strncpy(p->exit_msg, msg, sizeof(p->exit_msg));
-    p->exit_msg[sizeof(p->exit_msg) - 1] = '\0'; // ensure null-termination
-  } else {
-    p->exit_msg[0] = '\0';
+  // Reparent children to initproc
+  for (struct proc *pp = proc; pp < &proc[NPROC]; pp++) {
+      if (pp->parent == p) {
+          pp->parent = initproc;
+          if (pp->state == ZOMBIE) {
+              wakeup(initproc);
+          }
+      }
   }
+
+  // Wake up the parent process
+  wakeup(p->parent);
+
   p->state = ZOMBIE;
 
   release(&wait_lock);
+  acquire(&p->lock);
 
-  // Jump into the scheduler, never to return.
   sched();
   panic("zombie exit");
 }
@@ -397,52 +403,49 @@ exit(int status, char *msg)
 int
 wait(uint64 addr, uint64 msg_addr)
 {
-  // // Debug:
-  // printf("entered wait");
-  
-  struct proc *pp;
-  int havekids, pid;
+
   struct proc *p = myproc();
+  struct proc *child;
+  int havekids, pid;
 
   acquire(&wait_lock);
 
   for(;;){
     // Scan through table looking for exited children.
     havekids = 0;
-    for(pp = proc; pp < &proc[NPROC]; pp++){
-      if(pp->parent == p){
-        // make sure the child isn't still in exit() or swtch().
-        acquire(&pp->lock);
+    for(child = proc; child < &proc[NPROC]; child++){
+      if (child->parent != p)
+        continue;
 
-        havekids = 1;
-        if(pp->state == ZOMBIE){
-          // Found one.
-          pid = pp->pid;
-          if(addr != 0 && (copyout(p->pagetable, addr, (char *)&pp->xstate,
-                        sizeof(pp->xstate)) < 0 ||
-              copyout(p->pagetable, msg_addr, pp->exit_msg, 
-                                  sizeof(pp->exit_msg)) < 0)) {
-            release(&pp->lock);
+      havekids = 1;
+      if (child->state == ZOMBIE) {
+        // Copy exit status
+        if (addr && copyout(p->pagetable, addr, (char*)&child->xstate, sizeof(int)) < 0) {
             release(&wait_lock);
             return -1;
-          }
-          freeproc(pp);
-          release(&pp->lock);
-          release(&wait_lock);
-          return pid;
         }
-        release(&pp->lock);
+
+        // Copy exit message
+        if (msg_addr && copyout(p->pagetable, msg_addr, child->exit_msg, sizeof(child->exit_msg)) < 0) {
+            release(&wait_lock);
+            return -1;
+        }
+
+        pid = child->pid;
+        freeproc(child);
+        release(&wait_lock);
+        return pid;
       }
     }
 
-    // No point waiting if we don't have any children.
-    if(!havekids || killed(p)){
-      release(&wait_lock);
-      return -1;
+    // If no children exist, return immediately
+    if (!havekids) {
+        release(&wait_lock);
+        return -1;
     }
-    
-    // Wait for a child to exit.
-    sleep(p, &wait_lock);  //DOC: wait-sleep
+
+    // Sleep until a child exits
+    sleep(p, &wait_lock);
   }
 }
 

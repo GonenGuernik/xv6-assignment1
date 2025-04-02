@@ -10,22 +10,16 @@ uint64
 sys_exit(void)
 {
   int n;
-  uint64 msg_addr;
-  struct proc *p = myproc();
-  char msg[32] = {0};
-
+  char exit_msg[32]; 
+  
   argint(0, &n);
-  argaddr(1, &msg_addr);
 
-  // safely copy message from user space to kernel buffer
-  if (msg_addr != 0) {
-    if (copyin(p->pagetable, msg, msg_addr, sizeof(msg)) < 0)
-      return -1;
-    msg[sizeof(msg)-1] = '\0'; // ensure null-termination
-  }
+  // Retrieve string argument safely from user space
+  if (argstr(1, exit_msg, sizeof(exit_msg)) < 0)
+    return -1;
 
-  exit(n , msg);
-  return 0;  // not reached
+  exit(n, exit_msg);
+  return 0; 
 }
 
 uint64

@@ -47,14 +47,17 @@ int main(){
     //   exit(0, "parent done");
 
 
-    int pid = fork();
-    if (pid == 0) {
-        exit(0, "child done\n");
-    } else {
-        int status;
-        char msg[32];
-        wait(&status, msg);
-        printf("child exited with msg: %s", msg);
-    }
-    exit(0, "parent done\n");
+    //int pid = fork();
+    //if (pid == 0) {
+    //    exit(0, "child done\n");
+    //} else {
+    //    int status;
+    //    char msg[32];
+    //    wait(&status, msg);
+    //    printf("child exited with msg: %s", msg);
+    //}
+    //exit(0, "parent done\n");
+
+    exit(0, "Goodbye World xv6");
+    return 0; // Should not reach here
 }
