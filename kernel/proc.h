@@ -109,3 +109,7 @@ struct proc {
 
   char exit_msg[MSG_LEN];           // Holds exit message
 };
+
+extern struct proc proc[NPROC];
+
+extern struct spinlock wait_lock;
