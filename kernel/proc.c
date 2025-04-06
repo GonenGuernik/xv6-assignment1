@@ -6,6 +6,8 @@
 #include "proc.h"
 #include "defs.h"
 
+#define MAX_CHILDREN 16
+
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
@@ -694,5 +696,94 @@ procdump(void)
       state = "???";
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
+  }
+}
+
+int forkn(int n, uint64 pids) {
+    if (n < 1 || n > MAX_CHILDREN) {
+        return -1; // Restrict range of child processes
+    }
+
+    int created = 0;
+    int child_pids[MAX_CHILDREN];
+
+    // Fork n child processes
+    for (int i = 0; i < n; i++) {
+        int pid = fork();
+        if (pid < 0) {
+            // Cleanup: Kill already created processes
+            for (int j = 0; j < created; j++) {
+                kill(child_pids[j]);
+            }
+            return -1;  // Indicate failure
+        } else if (pid == 0) {
+            return i + 1;  // Child returns its index (1-based)
+        }
+        child_pids[created++] = pid;
+    }
+
+    // Copy child PIDs to userspace
+    if (copyout(myproc()->pagetable, pids, (char *)child_pids, sizeof(int) * n) < 0) {
+        return -1;
+    }
+
+    return 0; // Success, parent returns 0
+}
+
+int waitall(uint64 n, uint64 statuses) {
+  int finished;
+  int statuses_arr[NPROC];
+  struct proc *p;
+  struct proc *curproc = myproc();
+  
+  acquire(&wait_lock);
+
+  int has_children;
+  int child_still_alive;
+
+  for (;;) {  // Loop until all children are ZOMBIE
+      finished = 0;
+      has_children = 0;
+      child_still_alive = 0;
+
+      for (p = proc; p < &proc[NPROC]; p++) {
+          acquire(&p->lock);
+
+          if (p->parent == curproc) {
+              has_children = 1;
+
+              if (p->state == ZOMBIE) {
+                  statuses_arr[finished++] = p->xstate;
+                  freeproc(p);
+              } else {
+                  child_still_alive = 1;
+              }
+          }
+
+          release(&p->lock);
+      }
+
+      if (!has_children) {
+          // No child processes exist → return 0, set n = 0, do not modify statuses
+          release(&wait_lock);
+          if (copyout(curproc->pagetable, n, (char *)&finished, sizeof(int)) < 0)
+              return -1;
+          return 0;
+      }
+
+      if (!child_still_alive) {
+        // All children are now zombies (and collected), copy results
+        release(&wait_lock);
+
+        if (copyout(curproc->pagetable, n, (char *)&finished, sizeof(int)) < 0 ||
+            copyout(curproc->pagetable, statuses, (char *)statuses_arr, sizeof(int) * finished) < 0) {
+            return -1;
+        }
+
+        return 0;
+    }
+
+      // Not all children have finished — go back to sleep ZzZzZz
+      sleep(curproc, &wait_lock);
   }
 }

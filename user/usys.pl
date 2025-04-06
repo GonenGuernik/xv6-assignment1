@@ -37,3 +37,5 @@ entry("sbrk");
 entry("sleep");
 entry("uptime");
 entry("memsize");
+entry("forkn", "int", "int", "int*");
+entry("waitall", "int", "int*", "int*");
