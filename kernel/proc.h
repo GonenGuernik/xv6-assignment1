@@ -115,4 +115,4 @@ extern struct proc proc[NPROC];
 extern struct spinlock wait_lock;
 
 int forkn(int n, int *pids);
-int waitall(uint64 n, uint64 statuses);
+int waitall(uint64 n,int n_expected, uint64 statuses);
