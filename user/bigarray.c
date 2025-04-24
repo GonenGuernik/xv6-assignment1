@@ -45,6 +45,10 @@ int main() {
       total_sum += statuses[i];
     }
 
+    int mod = ARR_SIZE % N;
+    for(int i =ARR_SIZE-1;i > ARR_SIZE-1-mod; i-- ) //if ARR_SIZE is not divided by N
+      total_sum+= i;
+
     printf("Total sum: %d\n", total_sum);
     free(arr);
     exit(0, "parent done\n");

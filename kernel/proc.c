@@ -810,11 +810,13 @@ cleanup:
     np = children[j];
     
     acquire(&np->lock);
-    if(np->state == UNUSED)
-      continue;
+    // if(np->state == UNUSED)
+    //   continue;
       
-    // Set state to unused
-    np->state = UNUSED;
+    // // Set state to unused
+    // np->state = UNUSED;
+    freeproc(np);
+
     release(&np->lock);
     
     // No need to call freeproc again as we didn't set them to RUNNABLE
