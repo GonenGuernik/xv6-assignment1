@@ -24,7 +24,7 @@ int sleep(int);
 int uptime(void);
 int memsize(void);
 int forkn(int, int*);
-int waitall(int*,int, int*);
+int waitall(int*, int*);
 
 
 // ulib.c

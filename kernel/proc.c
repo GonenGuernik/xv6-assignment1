@@ -822,102 +822,100 @@ cleanup:
   
   return -1;
 }
+     
 
 // int
-// waitall(uint64 n, uint64 statuses) {
-//   int finished;
+// waitall(uint64 n_ptr, uint64 statuses) {
+//   int total_collected = 0;
 //   int statuses_arr[NPROC];
 //   struct proc *p;
 //   struct proc *curproc = myproc();
-  
+
+//   // Delete later:
+//   int n_expected = 4;
+
 //   acquire(&wait_lock);
 
-//   int has_children;
-//   int child_still_alive;
+//   for (;;) {
+//     int progress = 0;
 
-//   for (;;) {  // Loop until all children are ZOMBIE
-//     finished = 0;
-//     has_children = 0;
-//     child_still_alive = 0;
-  
 //     for (p = proc; p < &proc[NPROC]; p++) {
 //       acquire(&p->lock);
-  
-//       if (p->parent == curproc) {
-//         has_children = 1;
-  
-//         if (p->state == ZOMBIE) {
-//           statuses_arr[finished++] = p->xstate;
-//           freeproc(p);
-//         } else {
-//           child_still_alive = 1;
+//       if (p->parent == curproc && p->state == ZOMBIE) {
+//         // Collect this zombie child's status
+//         if (total_collected < NPROC) {
+//           statuses_arr[total_collected++] = p->xstate;
 //         }
+//         freeproc(p);
+//         progress = 1;
 //       }
-  
 //       release(&p->lock);
 //     }
-  
-//     if (!has_children) {
-//       // No child processes exist → return 0, set n = 0, do not modify statuses
-//       if (copyout(curproc->pagetable, n, (char *)&finished, sizeof(int)) < 0){
+
+//     // All expected children collected
+//     if (total_collected == n_expected) {
+//       if (copyout(curproc->pagetable, n_ptr, (char *)&total_collected, sizeof(int)) < 0 ||
+//           copyout(curproc->pagetable, statuses, (char *)statuses_arr, sizeof(int) * total_collected) < 0) {
 //         release(&wait_lock);
 //         return -1;
 //       }
 //       release(&wait_lock);
 //       return 0;
 //     }
-  
-//     if (!child_still_alive) {
-//       // All children are now zombies (and collected), copy results
-//       if (copyout(curproc->pagetable, n, (char *)&finished, sizeof(int)) < 0 ||
-//           copyout(curproc->pagetable, statuses, (char *)statuses_arr, sizeof(int) * finished) < 0) {
-//         release(&wait_lock);
-//         return -1;
-//       }
-  
-//       release(&wait_lock);
-//       return 0;
+
+//     if (!progress) {
+//       sleep(curproc, &wait_lock);
 //     }
-  
-//     if (killed(p)) {
-//       release(&wait_lock);
-//       return -1;
-//     }
-  
-//     // Not all children have finished — go back to sleep ZzZzZz
-//     sleep(curproc, &wait_lock);
 //   }
-// }     
+// }
 
 int
-waitall(uint64 n_ptr, int n_expected, uint64 statuses) {
-  int total_collected = 0;
-  int statuses_arr[NPROC];
-  struct proc *p;
-  struct proc *curproc = myproc();
+waitall(uint64 n, uint64 statuses)
+{
+
+  struct proc *p = myproc();
+  struct proc *child;
+  int childs_statuses[NPROC];
+
+  int havekids=0;
+  int active_children;
+  int exited_count = 0;
 
   acquire(&wait_lock);
 
-  for (;;) {
-    int progress = 0;
+  for(;;) {
+    // Scan through table looking for exited children.
 
-    for (p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
-      if (p->parent == curproc && p->state == ZOMBIE) {
-        // Collect this zombie child's status
-        if (total_collected < NPROC) {
-          statuses_arr[total_collected++] = p->xstate;
-        }
-        freeproc(p);
-        progress = 1;
+    active_children = 0;
+
+    for(child = proc; child < &proc[NPROC]; child++) {
+      if(child->parent != p)
+        continue;
+        
+      acquire(&child->lock);
+      havekids = 1;
+
+      // Check if it's a zombie
+      if(child->state == ZOMBIE) {
+        // Store its exit status
+        childs_statuses[exited_count] = child->xstate;
+        exited_count++;
+
+        // Free the process
+        freeproc(child);
+
+      } else if(child->state != UNUSED) {
+        // there is at least 1 proccess that still running
+        active_children = 1;
       }
-      release(&p->lock);
+
+      release(&child->lock);
     }
 
-    // All expected children collected
-    if (total_collected == n_expected) {
-      if (copyout(curproc->pagetable, n_ptr, (char *)&total_collected, sizeof(int)) < 0 ||
-          copyout(curproc->pagetable, statuses, (char *)statuses_arr, sizeof(int) * total_collected) < 0) {
+    // there are no childrens
+    if(havekids ==0) {
+      // copy number of finished children to user space
+      if(copyout(p->pagetable, n, (char*)&exited_count, sizeof(int)) < 0){
         release(&wait_lock);
         return -1;
       }
@@ -925,9 +923,23 @@ waitall(uint64 n_ptr, int n_expected, uint64 statuses) {
       return 0;
     }
 
-    if (!progress) {
-      sleep(curproc, &wait_lock);
+    // all children finished
+    if(active_children == 0) {
+      // copy number of finished children and statuses to user space
+      if(copyout(p->pagetable, n, (char*)&exited_count, sizeof(int)) < 0){
+        release(&wait_lock);
+        return -1;
+      }
+      if(copyout(p->pagetable,statuses, (char*)childs_statuses, exited_count * sizeof(int)) < 0){
+        release(&wait_lock);
+        return -1;
+      }
+      release(&wait_lock);
+      return 0;
     }
+
+    // Wait for children to exit
+    sleep(p, &wait_lock);
   }
 }
 

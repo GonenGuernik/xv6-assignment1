@@ -123,13 +123,11 @@ uint64
 sys_waitall(void) {
   uint64  n;
   uint64 statuses;
-  int n_expected;
 
   argaddr(0, &n);
-  argint(1, &n_expected);
-  argaddr(2, &statuses);
+  argaddr(1, &statuses);
 
-  return waitall(n, n_expected, statuses);
+  return waitall(n, statuses);
 }
 
 
